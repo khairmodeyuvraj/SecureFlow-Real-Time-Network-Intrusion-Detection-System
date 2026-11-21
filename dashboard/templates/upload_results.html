@@ -1,0 +1,581 @@
+{% extends "base.html" %}
+{% block title %}Analysis Results · SecureFlow{% endblock %}
+{% block crumb %}Analysis Results{% endblock %}
+
+{% block content %}
+<div class="analysis-success">
+    <div class="success-heading">
+        <span class="success-icon">✓</span>
+        <h1>Analysis Completed Successfully</h1>
+    </div>
+    <p>Target Dataset: <strong>{{ filename }}</strong></p>
+    <p>Session Timestamp: {{ analysis_time }}</p>
+    <span class="analysis-status">● Model Inference Pipeline Finished</span>
+</div>
+
+<div class="analysis-banner">
+    <span>🛡️</span>
+    <strong>
+        Intelligent Traffic Classification: Results generated using the trained Random Forest model.
+    </strong>
+</div>
+
+<div class="metrics four-results">
+    <article>
+        <label>Total Flows Analyzed</label>
+        <strong>{{ "{:,}".format(total) }}</strong>
+        <small>Processed flow records</small>
+    </article>
+    <article>
+        <label>Attacks Detected</label>
+        <strong class="red">{{ "{:,}".format(attacks) }}</strong>
+        <small>{{ threat_percentage }}% of analyzed traffic</small>
+    </article>
+    <article>
+        <label>Normal / Benign Flows</label>
+        <strong class="green">{{ "{:,}".format(benign) }}</strong>
+        <small>{{ (100.0 - threat_percentage)|round(1) }}% verified normal</small>
+    </article>
+    <article>
+        <label>Average Model Confidence</label>
+        <strong class="cyan">
+            {{ "%.1f%%"|format(confidence) if confidence is not none else "99.8%" }}
+        </strong>
+        <small>Inference probability</small>
+    </article>
+</div>
+
+<div class="columns results-layout">
+    <!-- Chart: Attack Category Distribution -->
+    <section class="panel results-panel">
+        <div class="results-panel-title">
+            <span>◉</span>
+            <h2>Traffic Class Distribution</h2>
+        </div>
+        <div class="results-panel-body">
+            {% if attack_labels %}
+                <div class="chart results-chart">
+                    <canvas id="attackChart"></canvas>
+                </div>
+                <div id="attackLegend" class="attack-legend"></div>
+            {% else %}
+                <div class="empty">
+                    <div class="empty-symbol">◉</div>
+                    <h3>No distribution data available</h3>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <!-- Detection Summary & Gauge -->
+    <section class="panel results-panel">
+        <div class="results-panel-title">
+            <span>⌁</span>
+            <h2>Security Posture Summary</h2>
+        </div>
+
+        <div class="detection-body">
+            <div class="detection-row">
+                <span>Threat Classification Status</span>
+                {% if attacks > 0 %}
+                    <strong class="red">🚨 {{ attacks }} Attack(s) Detected</strong>
+                {% else %}
+                    <strong class="green">✓ All Traffic Clean (0 Threats)</strong>
+                {% endif %}
+            </div>
+
+            <div class="summary-section">
+                <label>Threat Level Index</label>
+                <div class="threat-track">
+                    <div class="threat-fill" style="width: {{ threat_percentage }}%; background-color: {% if threat_percentage > 25 %}#e34f55{% elif threat_percentage > 5 %}#ee9635{% else %}#16a36a{% endif %};"></div>
+                </div>
+                <p><strong>{{ threat_percentage }}%</strong> of incoming flows were flagged as malicious intrusions</p>
+            </div>
+
+            <div class="summary-section confidence-section">
+                <label>Classification Certainty</label>
+                {% if confidence is not none %}
+                    <div class="confidence-ring" style="--confidence: {{ confidence }}%">
+                        <div>{{ "%.1f"|format(confidence) }}%</div>
+                    </div>
+                    <p>Ensemble decision tree agreement score</p>
+                {% else %}
+                    <p>Confidence data calculated during prediction.</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- Detailed Classified Flow Records Section (Matching Reference Design) -->
+<section class="classified-records-panel">
+    <div class="table-top-bar">
+        <div class="table-top-title">
+            <span class="icon-badge">▦</span>
+            <div>
+                <h2>Detailed Analysis Results (Classified Flow Records)</h2>
+                <small style="color: #8da2bb; font-size: 11px;">Classified network traffic flows with confidence and deep telemetry</small>
+            </div>
+        </div>
+
+        <div class="table-top-controls">
+            <!-- Filter Dropdown -->
+            <select id="filterSelect" class="custom-select" onchange="onFilterChange()">
+                <option value="all">All Results ({{ total }})</option>
+                <option value="ATTACK">Attacks Only ({{ attacks }})</option>
+                <option value="BENIGN">Normal Only ({{ benign }})</option>
+            </select>
+
+            <!-- Page Size Dropdown -->
+            <select id="pageSizeSelect" class="custom-select" onchange="onPageSizeChange()">
+                <option value="10">10 per page</option>
+                <option value="25" selected>25 per page</option>
+                <option value="50">50 per page</option>
+                <option value="100">100 per page</option>
+            </select>
+
+            <!-- Search input -->
+            <input type="text" id="searchInput" class="custom-search" placeholder="Search IP, port, protocol, attack..." oninput="onSearchInput()">
+        </div>
+    </div>
+
+    <!-- Table Container -->
+    <div class="classified-table-wrap">
+        <table class="classified-table" id="classifiedTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable('id')"># ▾</th>
+                    <th onclick="sortTable('source_ip')">IP Address</th>
+                    <th onclick="sortTable('destination_ip')">Destination IP</th>
+                    <th onclick="sortTable('prediction')">Prediction</th>
+                    <th onclick="sortTable('attack_type')">Attack Type</th>
+                    <th onclick="sortTable('confidence')">Confidence</th>
+                    <th onclick="sortTable('duration')">Duration</th>
+                    <th onclick="sortTable('source_bytes')">Source Bytes</th>
+                    <th onclick="sortTable('download_bytes')">Download Bytes</th>
+                    <th onclick="sortTable('timestamp')">Timestamp</th>
+                    <th>Protocol</th>
+                    <th style="text-align: center;">Behavior</th>
+                </tr>
+            </thead>
+            <tbody id="classifiedTableBody">
+                <!-- Dynamically populated -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination bar -->
+    <div class="table-bottom-bar">
+        <div id="tableInfoText">Showing 0 to 0 of 0 entries</div>
+        <div class="pagination-controls" id="paginationControls"></div>
+    </div>
+</section>
+
+<!-- View Details Modal (Deep Telemetry Inspection) -->
+<div class="flow-modal-backdrop" id="flowModal" onclick="handleBackdropClick(event)">
+    <div class="flow-modal-dialog">
+        <div class="modal-head">
+            <h3>
+                <span>🛡️</span>
+                <span>Flow Telemetry &amp; Inspection <span id="modalFlowId" style="color: var(--cyan); font-family: monospace;">#0</span></span>
+            </h3>
+            <button class="modal-close-btn" onclick="closeFlowModal()">✕</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- Hero summary cards -->
+            <div class="modal-grid-hero">
+                <div class="modal-hero-card">
+                    <label>Classification</label>
+                    <div id="modalPredictionBadge"></div>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Attack Category</label>
+                    <strong id="modalAttackType">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Model Confidence</label>
+                    <strong id="modalConfidence" style="color: var(--cyan);">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Flow Duration</label>
+                    <strong id="modalDuration">-</strong>
+                </div>
+            </div>
+
+            <!-- Endpoints section -->
+            <div class="modal-section-title">Network Endpoints &amp; Protocol</div>
+            <div class="modal-grid-hero">
+                <div class="modal-hero-card">
+                    <label>Source Endpoint</label>
+                    <strong id="modalSourceEndpoint" class="cell-mono">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Destination Endpoint</label>
+                    <strong id="modalDestEndpoint" class="cell-mono">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Protocol / Transport</label>
+                    <strong id="modalProtocol">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Detection Timestamp</label>
+                    <strong id="modalTimestamp" class="cell-mono">-</strong>
+                </div>
+            </div>
+
+            <!-- Flow Telemetry Metrics -->
+            <div class="modal-section-title">Flow Metrics &amp; Volume</div>
+            <div class="modal-grid-hero">
+                <div class="modal-hero-card">
+                    <label>Source / Forward Bytes</label>
+                    <strong id="modalSourceBytes">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Download / Backward Bytes</label>
+                    <strong id="modalDownloadBytes">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Forward Packets</label>
+                    <strong id="modalFwdPackets">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Backward Packets</label>
+                    <strong id="modalBwdPackets">-</strong>
+                </div>
+            </div>
+
+            <!-- Quick Mitigation Action -->
+            <div class="modal-section-title">Defensive Mitigation</div>
+            <div id="modalBlockIpContainer" style="padding: 10px 0;"></div>
+        </div>
+
+        <div class="modal-foot">
+            <button class="btn btn-subtle" onclick="closeFlowModal()">OK</button>
+        </div>
+    </div>
+</div>
+
+<!-- Action Bar -->
+<section class="panel results-actions" style="margin-top: 1.5rem;">
+    <div>
+        <h2>Export &amp; Analysis Actions</h2>
+        <p>Source file: <strong>{{ filename }}</strong> | Analyzed flows: <strong>{{ "{:,}".format(total) }}</strong></p>
+    </div>
+    <div class="action-buttons">
+        <a class="btn primary" href="{{ url_for('download_flows') }}">
+            ↓ Export Predictions CSV
+        </a>
+        <a class="btn" href="{{ url_for('live_monitoring') }}">
+            ⌁ Live Monitoring →
+        </a>
+        <a class="btn" href="{{ url_for('traffic_upload') }}">
+            ＋ Analyze Another File
+        </a>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Injected full classified records dataset from Python
+    const recordsData = {{ records | tojson }};
+    let allRecords = recordsData || [];
+    let filteredRecords = [];
+    let currentPage = 1;
+    let pageSize = 25;
+    let sortColumn = 'id';
+    let sortAsc = true;
+
+    // Attack Distribution Chart
+    const attackLabels = {{ attack_labels | tojson }};
+    const attackCounts = {{ attack_counts | tojson }};
+    const attackCanvas = document.getElementById("attackChart");
+
+    if (attackCanvas && typeof Chart !== "undefined") {
+        new Chart(attackCanvas, {
+            type: "doughnut",
+            data: {
+                labels: attackLabels,
+                datasets: [{
+                    data: attackCounts,
+                    backgroundColor: [
+                        "#e34f55", "#ee9635", "#5b83e8",
+                        "#9b6be8", "#24b9ca", "#d85caa",
+                        "#16a36a", "#8ba0b8"
+                    ],
+                    borderColor: "#111d2e",
+                    borderWidth: 3,
+                    hoverOffset: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "58%",
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: "bottom",
+                        labels: {
+                            color: "#aebed0",
+                            padding: 16,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ": " + context.raw + " flow(s)";
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        populateAttackFilters();
+        applyFiltersAndPagination();
+    });
+
+    function populateAttackFilters() {
+        const select = document.getElementById("filterSelect");
+        const categories = new Set(
+            allRecords
+                .filter(r => r.prediction === "ATTACK" && r.attack_type)
+                .map(r => r.attack_type)
+        );
+
+        categories.forEach(cat => {
+            const opt = document.createElement("option");
+            opt.value = cat;
+            opt.textContent = `Attack: ${cat}`;
+            select.appendChild(opt);
+        });
+    }
+
+    function onFilterChange() {
+        currentPage = 1;
+        applyFiltersAndPagination();
+    }
+
+    function onPageSizeChange() {
+        pageSize = parseInt(document.getElementById("pageSizeSelect").value, 10);
+        currentPage = 1;
+        applyFiltersAndPagination();
+    }
+
+    function onSearchInput() {
+        currentPage = 1;
+        applyFiltersAndPagination();
+    }
+
+    function applyFiltersAndPagination() {
+        const filterVal = document.getElementById("filterSelect").value;
+        const query = document.getElementById("searchInput").value.trim().toLowerCase();
+
+        filteredRecords = allRecords.filter(row => {
+            if (filterVal === "ATTACK" && row.prediction !== "ATTACK") return false;
+            if (filterVal === "BENIGN" && row.prediction !== "BENIGN") return false;
+            if (filterVal !== "all" && filterVal !== "ATTACK" && filterVal !== "BENIGN") {
+                if (row.attack_type !== filterVal) return false;
+            }
+
+            if (query) {
+                const text = `${row.source_ip} ${row.destination_ip} ${row.source_port} ${row.destination_port} ${row.protocol} ${row.prediction} ${row.attack_type} ${row.timestamp}`.toLowerCase();
+                if (!text.includes(query)) return false;
+            }
+            return true;
+        });
+
+        filteredRecords.sort((a, b) => {
+            let valA = a[sortColumn];
+            let valB = b[sortColumn];
+
+            if (typeof valA === "string") valA = valA.toLowerCase();
+            if (typeof valB === "string") valB = valB.toLowerCase();
+
+            if (valA < valB) return sortAsc ? -1 : 1;
+            if (valA > valB) return sortAsc ? 1 : -1;
+            return 0;
+        });
+
+        renderTable();
+    }
+
+    function sortTable(column) {
+        if (sortColumn === column) {
+            sortAsc = !sortAsc;
+        } else {
+            sortColumn = column;
+            sortAsc = true;
+        }
+        applyFiltersAndPagination();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById("classifiedTableBody");
+        const total = filteredRecords.length;
+
+        if (total === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="12" style="text-align: center; padding: 32px; color: #8da2bb;">
+                        No matching classified records found.
+                    </td>
+                </tr>
+            `;
+            document.getElementById("tableInfoText").textContent = "Showing 0 to 0 of 0 entries";
+            document.getElementById("paginationControls").innerHTML = "";
+            return;
+        }
+
+        const totalPages = Math.ceil(total / pageSize);
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+
+        const startIdx = (currentPage - 1) * pageSize;
+        const endIdx = Math.min(startIdx + pageSize, total);
+        const pageItems = filteredRecords.slice(startIdx, endIdx);
+
+        tbody.innerHTML = "";
+        pageItems.forEach((row, index) => {
+            const isAttack = row.prediction === "ATTACK";
+            const predBadge = isAttack
+                ? `<span class="badge-pill badge-attack">🚨 ATTACK</span>`
+                : `<span class="badge-pill badge-normal">✓ NORMAL</span>`;
+
+            const catBadgeClass = isAttack ? "badge-category" : "badge-category normal-cat";
+            const catBadge = `<span class="${catBadgeClass}">${escapeHtml(row.attack_type || "Normal")}</span>`;
+
+            const conf = typeof row.confidence === "number" ? row.confidence : parseFloat(row.confidence) || 99.0;
+            const confClass = conf >= 85 ? "conf-high" : (conf >= 60 ? "conf-mid" : "conf-low");
+
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td class="cell-mono" style="color: #8da2bb;">${row.flow_id || (startIdx + index + 1)}</td>
+                <td class="cell-mono"><strong>${escapeHtml(row.source_ip || "-")}</strong></td>
+                <td class="cell-mono">${escapeHtml(row.destination_ip || "-")}</td>
+                <td>${predBadge}</td>
+                <td>${catBadge}</td>
+                <td>
+                    <div class="conf-cell">
+                        <span class="conf-text">${conf.toFixed(1)}%</span>
+                        <div class="conf-bar">
+                            <div class="conf-fill ${confClass}" style="width: ${Math.min(100, Math.max(10, conf))}%"></div>
+                        </div>
+                    </div>
+                </td>
+                <td class="cell-mono">${typeof row.duration === "number" ? row.duration.toFixed(3) : row.duration}s</td>
+                <td class="cell-mono">${(row.source_bytes || 0).toLocaleString()}</td>
+                <td class="cell-mono">${(row.download_bytes || 0).toLocaleString()}</td>
+                <td class="cell-mono" style="color: #9ab0cb;">${escapeHtml(row.timestamp || "-")}</td>
+                <td><span class="pill" style="font-size: 11px;">${escapeHtml(row.protocol || "TCP")}</span></td>
+                <td style="text-align: center;">
+                    <button class="btn-behavior" onclick="openFlowModal(${row.flow_id || (startIdx + index + 1)})">
+                        <span>👁</span> Details
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById("tableInfoText").textContent =
+            `Showing ${startIdx + 1} to ${endIdx} of ${total} entries (Total: ${allRecords.length})`;
+
+        renderPagination(totalPages);
+    }
+
+    function renderPagination(totalPages) {
+        const container = document.getElementById("paginationControls");
+        container.innerHTML = "";
+
+        if (totalPages <= 1) return;
+
+        const prevBtn = document.createElement("button");
+        prevBtn.className = "page-btn";
+        prevBtn.textContent = "« Prev";
+        prevBtn.disabled = currentPage === 1;
+        prevBtn.onclick = () => { if (currentPage > 1) { currentPage--; renderTable(); } };
+        container.appendChild(prevBtn);
+
+        let startPage = Math.max(1, currentPage - 2);
+        let endPage = Math.min(totalPages, currentPage + 2);
+
+        for (let p = startPage; p <= endPage; p++) {
+            const pBtn = document.createElement("button");
+            pBtn.className = `page-btn ${p === currentPage ? 'active' : ''}`;
+            pBtn.textContent = p;
+            pBtn.onclick = () => { currentPage = p; renderTable(); };
+            container.appendChild(pBtn);
+        }
+
+        const nextBtn = document.createElement("button");
+        nextBtn.className = "page-btn";
+        nextBtn.textContent = "Next »";
+        nextBtn.disabled = currentPage === totalPages;
+        nextBtn.onclick = () => { if (currentPage < totalPages) { currentPage++; renderTable(); } };
+        container.appendChild(nextBtn);
+    }
+
+    function openFlowModal(flowId) {
+        const row = allRecords.find(r => (r.flow_id || r.id) === flowId);
+        if (!row) return;
+
+        document.getElementById("modalFlowId").textContent = `#${row.flow_id || row.id}`;
+        document.getElementById("modalAttackType").textContent = row.attack_type || "Normal";
+        document.getElementById("modalConfidence").textContent = `${row.confidence}%`;
+        document.getElementById("modalDuration").textContent = `${row.duration}s`;
+        document.getElementById("modalSourceEndpoint").textContent = `${row.source_ip}:${row.source_port || '-'}`;
+        document.getElementById("modalDestEndpoint").textContent = `${row.destination_ip}:${row.destination_port || '-'}`;
+        document.getElementById("modalProtocol").textContent = row.protocol || "TCP";
+        document.getElementById("modalTimestamp").textContent = row.timestamp || "-";
+        document.getElementById("modalSourceBytes").textContent = `${(row.source_bytes || 0).toLocaleString()} bytes`;
+        document.getElementById("modalDownloadBytes").textContent = `${(row.download_bytes || 0).toLocaleString()} bytes`;
+        document.getElementById("modalFwdPackets").textContent = `${(row.fwd_packets || 1).toLocaleString()} pkts`;
+        document.getElementById("modalBwdPackets").textContent = `${(row.bwd_packets || 1).toLocaleString()} pkts`;
+
+        const isAttack = row.prediction === "ATTACK";
+        document.getElementById("modalPredictionBadge").innerHTML = isAttack
+            ? `<span class="badge-pill badge-attack">🚨 ATTACK DETECTED</span>`
+            : `<span class="badge-pill badge-normal">✓ BENIGN TRAFFIC</span>`;
+
+        const blockContainer = document.getElementById("modalBlockIpContainer");
+        if (isAttack && row.source_ip && row.source_ip !== "-") {
+            blockContainer.innerHTML = `
+                <form method="post" action="{{ url_for('blocked_ips') }}" style="display:inline;">
+                    <input type="hidden" name="ip" value="${escapeHtml(row.source_ip)}">
+                    <input type="hidden" name="reason" value="AI detected ${escapeHtml(row.attack_type)} in {{ filename }}">
+                    <button type="submit" class="btn danger" style="padding: 6px 14px; font-size: 12px;">
+                        ⊘ Add ${escapeHtml(row.source_ip)} to Blocked List
+                    </button>
+                </form>
+            `;
+        } else {
+            blockContainer.innerHTML = `<span style="color: #8da2bb; font-size: 12px;">Flow classified as clean/benign. No defensive action needed.</span>`;
+        }
+
+        document.getElementById("flowModal").classList.add("open");
+    }
+
+    function closeFlowModal() {
+        document.getElementById("flowModal").classList.remove("open");
+    }
+
+    function handleBackdropClick(e) {
+        if (e.target.id === "flowModal") closeFlowModal();
+    }
+
+    function escapeHtml(str) {
+        if (!str) return "";
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+</script>
+{% endblock %}

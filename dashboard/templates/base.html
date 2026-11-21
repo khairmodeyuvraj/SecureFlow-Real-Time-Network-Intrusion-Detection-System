@@ -1,0 +1,127 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{% block title %}SecureFlow IDS{% endblock %}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet">
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+
+    <!-- Chart.js for traffic and attack distribution charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    {% block head %}{% endblock %}
+</head>
+
+<body>
+<div class="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+
+        <a class="brand" href="{{ url_for('dashboard') }}">
+            <b>🛡️</b>
+            <span>SecureFlow</span>
+        </a>
+
+        <p class="side-label">WORKSPACE</p>
+
+        <nav>
+            <a class="{% if request.endpoint == 'dashboard' %}active{% endif %}"
+               href="{{ url_for('dashboard') }}">
+                ▦ <span>Dashboard</span>
+            </a>
+
+            <a class="{% if request.endpoint == 'traffic_upload' %}active{% endif %}"
+               href="{{ url_for('traffic_upload') }}">
+                ⇧ <span>Traffic Upload</span>
+            </a>
+
+            <a class="{% if request.endpoint == 'upload_results' %}active{% endif %}"
+               href="{{ url_for('upload_results') }}">
+                ✓ <span>Analysis Results</span>
+            </a>
+
+            <a class="{% if request.endpoint == 'live_monitoring' %}active{% endif %}"
+               href="{{ url_for('live_monitoring') }}">
+                ⌁ <span>Live Monitoring</span>
+            </a>
+
+            <a class="{% if request.endpoint == 'threat_reports' %}active{% endif %}"
+               href="{{ url_for('threat_reports') }}">
+                ▤ <span>Threat Reports</span>
+            </a>
+
+            <a class="{% if request.endpoint == 'blocked_ips' %}active{% endif %}"
+               href="{{ url_for('blocked_ips') }}">
+                ⊘ <span>Blocked IPs</span>
+            </a>
+        </nav>
+
+        <div class="side-bottom">
+            <i></i> Dashboard server ready
+        </div>
+
+    </aside>
+
+    <!-- Main application -->
+    <main>
+
+        <!-- Top navigation -->
+        <header class="topbar">
+
+            <span class="breadcrumb">
+                <a href="{{ url_for('dashboard') }}">Home</a>
+                <b>/</b>
+                {% block crumb %}Dashboard{% endblock %}
+            </span>
+
+            <div class="topbar-actions">
+
+                <span class="engine">
+                    <span>●</span> Engine Active
+                </span>
+
+                <form method="post" action="{{ url_for('logout') }}">
+                    <button class="logout-button" type="submit">
+                        Sign out
+                    </button>
+                </form>
+
+            </div>
+        </header>
+
+        <!-- Page content -->
+        <section class="page">
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}" role="status">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+
+        </section>
+
+    </main>
+</div>
+
+<!-- Shared JavaScript -->
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+<!-- Page-specific JavaScript must run after Chart.js and shared scripts -->
+{% block scripts %}{% endblock %}
+
+</body>
+</html>

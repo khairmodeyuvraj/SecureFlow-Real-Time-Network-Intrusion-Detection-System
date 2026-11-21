@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Traffic Upload · SecureFlow{% endblock %}
+{% block crumb %}Traffic Upload{% endblock %}
+
+{% block content %}
+<div class="heading">
+    <div>
+        <small>ANALYSIS WORKSPACE</small>
+        <h1>Upload &amp; Batch Analysis</h1>
+        <p>Analyze network traffic flows using the trained AI Intrusion Detection model.</p>
+    </div>
+</div>
+
+<div class="columns upload-layout">
+    <section class="panel">
+        <form method="post" enctype="multipart/form-data" id="uploadForm">
+            <label class="dropzone" for="traffic_file">
+                <b>⇧</b>
+                <strong>Choose a file to analyze</strong>
+                <span>Supports CICIDS2017 CSV, CICFlowMeter flow export, or PCAP capture</span>
+                <input id="traffic_file" name="traffic_file"
+                       type="file" accept=".pcap,.pcapng,.csv" required>
+            </label>
+
+            <div class="upload-meta">
+                <span>Current flows in system:
+                    <b>{{ "{:,}".format(flow_count) }}</b>
+                </span>
+                <button class="btn primary" id="uploadButton" type="submit">
+                    Run AI Detection →
+                </button>
+            </div>
+        </form>
+
+        <!-- Quick-load sample datasets -->
+        <div style="margin-top: 2rem; border-top: 1px solid rgba(143,161,185,0.15); padding-top: 1.2rem;">
+            <h3 style="font-size: 0.95rem; margin-bottom: 0.6rem; color: #aebed0;">
+                ⚡ Quick Demonstration Samples
+            </h3>
+            <p style="font-size: 0.82rem; color: #8ba0b8; margin-bottom: 0.8rem;">
+                Select a verified benchmark dataset to evaluate model behavior instantly:
+            </p>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.6rem;">
+                <form method="post" action="{{ url_for('load_sample_file', filename='sample_mixed_traffic.csv') }}">
+                    <button type="submit" class="btn" style="font-size: 0.8rem; padding: 6px 12px; border-color: #35d5e6; color: #35d5e6;">
+                        ▶ Test Mixed Traffic (250 Flows)
+                    </button>
+                </form>
+                <form method="post" action="{{ url_for('load_sample_file', filename='sample_attack_traffic.csv') }}">
+                    <button type="submit" class="btn" style="font-size: 0.8rem; padding: 6px 12px; border-color: #e34f55; color: #ff758d;">
+                        ▶ Test Attacks Only (150 Attacks)
+                    </button>
+                </form>
+                <form method="post" action="{{ url_for('load_sample_file', filename='sample_benign_traffic.csv') }}">
+                    <button type="submit" class="btn" style="font-size: 0.8rem; padding: 6px 12px; border-color: #16a36a; color: #39dba4;">
+                        ▶ Test Benign Only (150 Normal)
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Intelligent Processing Pipeline</h2>
+        <ol class="pipeline">
+            <li>
+                <b>1</b>
+                <div>
+                    <strong>Data Ingestion &amp; Validation</strong>
+                    <p>Validates file structure, header schema, and column formats</p>
+                </div>
+            </li>
+            <li>
+                <b>2</b>
+                <div>
+                    <strong>Feature Engineering &amp; Alignment</strong>
+                    <p>Calculates packet/byte ratios and formats exact 74 numeric features</p>
+                </div>
+            </li>
+            <li>
+                <b>3</b>
+                <div>
+                    <strong>Random Forest Inference</strong>
+                    <p>Generates binary classification (Benign vs Attack) with class probabilities</p>
+                </div>
+            </li>
+            <li>
+                <b>4</b>
+                <div>
+                    <strong>Automated Alert &amp; Threat Logging</strong>
+                    <p>Logs high-confidence intrusion events for analyst review</p>
+                </div>
+            </li>
+        </ol>
+
+        <div class="notice">
+            <b>Supported Formats:</b> Preprocessed benchmark CSVs, Raw CICIDS2017 CSVs, CICFlowMeter output CSVs, and packet captures (.pcap / .pcapng).
+        </div>
+    </section>
+</div>
+{% endblock %}

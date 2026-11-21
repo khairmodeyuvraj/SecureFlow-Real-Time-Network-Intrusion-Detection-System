@@ -1,0 +1,105 @@
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# IDE and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Environment variables and secrets (NEVER commit credentials)
+.env
+.env.*
+!.env
+*.env
+*.key
+*.pem
+
+# Local database files containing user account information
+*.db
+*.sqlite
+*.sqlite3
+dashboard/users.db
+instance/
+
+# User-isolated data directories and temporary uploads
+dashboard/results/users/
+dashboard/uploads/*
+!dashboard/uploads/.gitkeep
+
+# Application logs and runtime output
+*.log
+results/alerts/*.log
+results/alerts/*.csv
+logs/
+
+# Runtime dashboard results
+dashboard/results/*.json
+dashboard/results/*.csv
+
+# Packet capture files
+*.pcap
+*.pcapng
+
+# Processed datasets (avoid large files in Git)
+data/processed/*.csv
+
+# Pytest and coverage caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Large original CICIDS2017 datasets
+data/raw/CICIDS2017/
+
+# Ignore all processed training datasets
+data/processed/
+
+# Packet capture files
+*.pcap
+*.pcapng
+
+# Large temporary files
+*.tmp
+*.bak

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureFlow | Create Account</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet">
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/login.css') }}">
+    <style>
+        /* Password strength indicator */
+        .strength-bar-wrap {
+            height: 4px;
+            background: #0d1f31;
+            border-radius: 4px;
+            margin-top: 7px;
+            overflow: hidden;
+        }
+        .strength-bar {
+            height: 100%;
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.3s ease, background-color 0.3s ease;
+        }
+        .strength-label {
+            font-size: 11px;
+            color: #7a8fa0;
+            margin-top: 4px;
+            min-height: 16px;
+            transition: color 0.3s ease;
+        }
+        /* Create account link */
+        .login-switch {
+            margin: 18px 0 0;
+            text-align: center;
+            color: #8495a6;
+            font-size: 12.5px;
+        }
+        .login-switch a {
+            color: #35dce6;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+        .login-switch a:hover {
+            color: #7ef2f9;
+            text-decoration: underline;
+        }
+        .register-heading {
+            margin: 0 0 22px;
+            font-size: 19px;
+            font-weight: 700;
+            color: #f4f8fc;
+            text-align: center;
+            letter-spacing: -0.3px;
+        }
+    </style>
+</head>
+
+<body class="login-page">
+
+    <!-- Cybersecurity background graphic -->
+    <div class="background-art" aria-hidden="true">
+        <div class="network network-one"></div>
+        <div class="network network-two"></div>
+        <div class="background-shield">
+            <svg width="220" height="220" viewBox="0 0 24 24" fill="none" stroke="#00d9f5" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+        </div>
+        <div class="code-lines"></div>
+    </div>
+
+    <main class="login-wrapper">
+
+        <!-- SecureFlow Branding -->
+        <header class="brand">
+            <div class="brand-title">
+                <svg class="brand-shield" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="rgba(31, 228, 215, 0.16)" stroke="#20dce8"/>
+                </svg>
+                <span>Secure<span class="brand-accent">Flow</span></span>
+            </div>
+            <p>AI-BASED INTRUSION DETECTION SYSTEM</p>
+        </header>
+
+        <!-- Register Card -->
+        <section class="login-card">
+
+            <h2 class="register-heading">Create Account</h2>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endwith %}
+
+            <form method="post" action="{{ url_for('register') }}" class="login-form" novalidate>
+
+                <!-- Full Name -->
+                <div class="form-group">
+                    <label for="full_name" class="form-label">Full Name</label>
+                    <input
+                        type="text"
+                        id="full_name"
+                        name="full_name"
+                        class="form-input"
+                        placeholder="Enter your full name"
+                        autocomplete="name"
+                        value="{{ request.form.get('full_name', '') }}"
+                        required
+                        autofocus>
+                </div>
+
+                <!-- Email -->
+                <div class="form-group">
+                    <label for="email" class="form-label">Email address</label>
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        class="form-input"
+                        placeholder="Enter your email address"
+                        autocomplete="email"
+                        value="{{ request.form.get('email', '') }}"
+                        required>
+                </div>
+
+                <!-- Password -->
+                <div class="form-group">
+                    <label for="password" class="form-label">Password</label>
+                    <div class="password-wrapper">
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="form-input password-input"
+                            placeholder="Create a strong password"
+                            autocomplete="new-password"
+                            id="regPassword"
+                            required>
+                        <button
+                            type="button"
+                            class="password-toggle-btn"
+                            id="togglePassword"
+                            aria-label="Show password">
+                            <svg class="eye-icon eye-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg class="eye-icon eye-closed" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="strength-bar-wrap">
+                        <div class="strength-bar" id="strengthBar"></div>
+                    </div>
+                    <div class="strength-label" id="strengthLabel"></div>
+                </div>
+
+                <!-- Confirm Password -->
+                <div class="form-group">
+                    <label for="confirm_password" class="form-label">Confirm Password</label>
+                    <div class="password-wrapper">
+                        <input
+                            type="password"
+                            id="confirm_password"
+                            name="confirm_password"
+                            class="form-input password-input"
+                            placeholder="Repeat your password"
+                            autocomplete="new-password"
+                            required>
+                        <button
+                            type="button"
+                            class="password-toggle-btn"
+                            id="toggleConfirm"
+                            aria-label="Show password">
+                            <svg class="eye-icon eye-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg class="eye-icon eye-closed" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <button class="sign-in-btn" type="submit" style="margin-top: 6px;">
+                    Create Account
+                </button>
+
+            </form>
+
+            <p class="login-switch">
+                Already have an account?
+                <a href="{{ url_for('login') }}">Sign In</a>
+            </p>
+
+            <p class="security-note">
+                Secured by AI-Driven IDS Flow | Access unauthorized is strictly prohibited
+            </p>
+
+        </section>
+
+        <footer class="page-footer">
+            SecureFlow &bull; Network Defense Console
+        </footer>
+
+    </main>
+
+    <script>
+        // Eye toggle – password
+        (function () {
+            function setupToggle(inputId, btnId) {
+                const input = document.getElementById(inputId);
+                const btn = document.getElementById(btnId);
+                if (!input || !btn) return;
+                const open = btn.querySelector('.eye-open');
+                const closed = btn.querySelector('.eye-closed');
+                btn.addEventListener('click', function () {
+                    const show = input.type === 'password';
+                    input.type = show ? 'text' : 'password';
+                    open.style.display = show ? 'none' : 'block';
+                    closed.style.display = show ? 'block' : 'none';
+                    btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+                });
+            }
+            setupToggle('password', 'togglePassword');
+            setupToggle('confirm_password', 'toggleConfirm');
+        })();
+
+        // Password strength indicator
+        (function () {
+            const bar = document.getElementById('strengthBar');
+            const label = document.getElementById('strengthLabel');
+            const input = document.getElementById('password');
+            if (!input || !bar || !label) return;
+
+            input.addEventListener('input', function () {
+                const val = input.value;
+                let score = 0;
+                if (val.length >= 8)  score++;
+                if (val.length >= 12) score++;
+                if (/[A-Z]/.test(val)) score++;
+                if (/[0-9]/.test(val)) score++;
+                if (/[^A-Za-z0-9]/.test(val)) score++;
+
+                const levels = [
+                    { pct: '0%',   color: '#1a3146', text: '' },
+                    { pct: '25%',  color: '#e34f55', text: 'Weak' },
+                    { pct: '50%',  color: '#e38a34', text: 'Fair' },
+                    { pct: '75%',  color: '#e3c534', text: 'Good' },
+                    { pct: '90%',  color: '#16e8a0', text: 'Strong' },
+                    { pct: '100%', color: '#16e8c5', text: 'Excellent' },
+                ];
+                const lvl = val.length === 0 ? levels[0] : levels[Math.min(score, 5)];
+                bar.style.width = lvl.pct;
+                bar.style.backgroundColor = lvl.color;
+                label.textContent = lvl.text;
+                label.style.color = lvl.color;
+            });
+        })();
+    </script>
+
+</body>
+</html>
+

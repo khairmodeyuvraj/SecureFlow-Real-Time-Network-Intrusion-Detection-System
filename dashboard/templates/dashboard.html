@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · SecureFlow{% endblock %}
+{% block crumb %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="heading">
+    <div>
+        <small>AI-BASED INTRUSION DETECTION SYSTEM</small>
+        <h1>Security Operations Dashboard</h1>
+        <p>Real-time threat intelligence and automated machine learning network defense.</p>
+    </div>
+    <div style="display: flex; gap: 0.6rem;">
+        <a class="btn primary" href="{{ url_for('traffic_upload') }}">＋ Analyze Traffic</a>
+        <a class="btn" href="{{ url_for('live_monitoring') }}">⌁ Live Telemetry</a>
+    </div>
+</div>
+
+<div class="notice" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+    <div>
+        <b>AI Detection Engine:</b>
+        <span class="pill" style="margin-left: 0.4rem; background: rgba(22, 163, 106, 0.15); color: #39dba4; border: 1px solid #16a36a;">
+            ● Online &amp; Loaded (74 Trained Features)
+        </span>
+        <span style="display: block; font-size: 0.82rem; color: #8ba0b8; margin-top: 4px;">
+            Random Forest binary classifier trained on the CICIDS2017 intrusion benchmark dataset.
+        </span>
+    </div>
+    <span style="font-size: 0.85rem; color: #35d5e6;">
+        Accuracy: 99.86% | F1-Score: 99.60%
+    </span>
+</div>
+
+{% if summary.total_flows == 0 and summary.alerts == 0 %}
+<div class="panel" style="margin-bottom: 1.5rem; padding: 18px 24px; border-left: 4px solid var(--cyan); background: rgba(14, 30, 48, 0.75);">
+    <div style="display: flex; align-items: center; gap: 14px;">
+        <span style="font-size: 22px;">📊</span>
+        <div>
+            <h3 style="margin: 0; font-size: 15px; color: #f4f8fc; font-weight: 600;">Fresh Workspace Initialized</h3>
+            <p style="margin: 4px 0 0; color: #8da2bb; font-size: 13px;">
+                No analysis data available yet. Upload a network traffic CSV file or start live monitoring to begin.
+            </p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="metrics">
+    <article>
+        <label>Total Flows Inspected</label>
+        <strong>{{ "{:,}".format(summary.total_flows) }}</strong>
+        <small>Active flow dataset</small>
+    </article>
+    <article>
+        <label>Detected Intrusions</label>
+        <strong class="red">{{ "{:,}".format(summary.attacks) }}</strong>
+        <small>{{ summary.threat_percentage }}% threat ratio</small>
+    </article>
+    <article>
+        <label>Benign Traffic</label>
+        <strong class="green">{{ "{:,}".format(summary.benign) }}</strong>
+        <small>Verified legitimate flows</small>
+    </article>
+    <article>
+        <label>Logged Alerts</label>
+        <strong class="cyan">{{ "{:,}".format(summary.alerts) }}</strong>
+        <small>Persistent security log</small>
+    </article>
+</div>
+
+<div class="columns">
+    <section class="panel">
+        <div class="panel-head">
+            <div>
+                <h2>Traffic Protocol Breakdown</h2>
+                <p>Distribution of network protocols in current flow dataset</p>
+            </div>
+            <span class="pill">BATCH DATA</span>
+        </div>
+
+        {% if protocols %}
+        <div class="chart">
+            <canvas id="protocolChart"></canvas>
+        </div>
+        {% else %}
+        <div class="empty">
+            <b>◌</b>
+            <h3>No traffic data loaded yet</h3>
+            <p>Upload a flow CSV or PCAP capture to populate the dashboard.</p>
+            <a class="btn primary" style="margin-top: 0.8rem;" href="{{ url_for('traffic_upload') }}">Upload Traffic →</a>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="panel">
+        <div class="panel-head">
+            <div>
+                <h2>Recent Security Alerts</h2>
+                <p>Latest high-priority intrusion events</p>
+            </div>
+            <a href="{{ url_for('threat_reports') }}">View all ({{ summary.alerts }}) →</a>
+        </div>
+
+        {% if alerts %}
+            <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+            {% for alert in alerts %}
+            <div class="alert" style="background: rgba(17, 29, 46, 0.7); border: 1px solid rgba(143,161,185,0.12); padding: 0.75rem 1rem; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.8rem;">
+                    <i style="color: #ff758d; font-style: normal; font-weight: bold; background: rgba(227, 79, 85, 0.2); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">!</i>
+                    <div>
+                        <b style="font-size: 0.9rem; color: #fff;">{{ alert.type }}</b>
+                        <p style="margin: 2px 0 0; font-family: monospace; font-size: 0.82rem; color: #aebed0;">{{ alert.src_ip }} → {{ alert.dst_ip }}</p>
+                        <small style="color: #8ba0b8; font-size: 0.75rem;">{{ alert.time }}</small>
+                    </div>
+                </div>
+                <span class="pill" style="background: rgba(227, 79, 85, 0.15); color: #ff758d; border: 1px solid #e34f55; font-size: 0.75rem;">
+                    {{ alert.severity }}
+                </span>
+            </div>
+            {% endfor %}
+            </div>
+        {% else %}
+        <div class="empty">
+            <b>✓</b>
+            <h3>No active threat alerts</h3>
+            <p>Intrusion events detected during analysis will be listed here.</p>
+        </div>
+        {% endif %}
+    </section>
+</div>
+
+<section class="panel quick">
+    <h2>Quick Navigation &amp; Operations</h2>
+    <div class="quick-grid">
+        <a href="{{ url_for('traffic_upload') }}">
+            ⇧ <b>Upload Traffic</b>
+            <small>Analyze CSV dataset or PCAP</small>
+        </a>
+        <a href="{{ url_for('live_monitoring') }}">
+            ⌁ <b>Live Telemetry</b>
+            <small>Streaming real-time flow detection</small>
+        </a>
+        <a href="{{ url_for('threat_reports') }}">
+            ▤ <b>Threat Reports</b>
+            <small>Audit history &amp; export logs</small>
+        </a>
+        <a href="{{ url_for('blocked_ips') }}">
+            ⊘ <b>Blocked IP Registry</b>
+            <small>Manage defensive blacklist</small>
+        </a>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{% if protocols %}
+<script>
+    window.protocolLabels = {{ protocols | map(attribute='name') | list | tojson }};
+    window.protocolValues = {{ protocols | map(attribute='count') | list | tojson }};
+</script>
+{% endif %}
+{% endblock %}

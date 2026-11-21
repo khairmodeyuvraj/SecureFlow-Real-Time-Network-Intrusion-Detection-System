@@ -1,0 +1,76 @@
+
+{% extends "base.html" %}
+{% block title %}Blocked IPs · SecureFlow{% endblock %}
+{% block crumb %}Blocked IPs{% endblock %}
+
+{% block content %}
+<div class="heading">
+    <div>
+        <small>ACCESS CONTROL</small>
+        <h1>Blocked IPs Management</h1>
+        <p>Manage IP entries recorded by this dashboard.</p>
+    </div>
+</div>
+
+<div class="notice warning">
+    <b>Dashboard-only list:</b>
+    this does not block traffic or change Windows Firewall.
+</div>
+
+<section class="panel">
+    <h2>Add IP Address</h2>
+
+    <form method="post" class="inline-form">
+        <label>
+            IP address
+            <input name="ip" placeholder="192.168.1.100" required>
+        </label>
+
+        <label class="grow">
+            Reason
+            <input name="reason" placeholder="e.g. reviewed suspicious host">
+        </label>
+
+        <button class="btn primary" type="submit">＋ Add IP</button>
+    </form>
+</section>
+
+<section class="panel">
+    <h2>IP List ({{ blocked | length }})</h2>
+
+    {% if blocked %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>IP Address</th>
+                    <th>Reason</th>
+                    <th>Added</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in blocked %}
+                <tr>
+                    <td>{{ item.ip }}</td>
+                    <td>{{ item.reason }}</td>
+                    <td>{{ item.added_at }}</td>
+                    <td>
+                        <form method="post"
+                              action="{{ url_for('remove_blocked_ip', item_id=item.id) }}">
+                            <button class="btn danger" type="submit">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <h3>No IP entries</h3>
+        <p>Add an address above to populate the list.</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Threat Reports · SecureFlow{% endblock %}
+{% block crumb %}Threat Reports{% endblock %}
+
+{% block content %}
+<div class="heading">
+    <div>
+        <small>INVESTIGATION &amp; AUDIT LOGS</small>
+        <h1>Threat Reports &amp; History</h1>
+        <p>Review historical analysis runs, audit persistent security alerts, and export telemetry.</p>
+    </div>
+    <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+        <a class="btn primary" href="{{ url_for('download_flows') }}">
+            ↓ Export Flows CSV
+        </a>
+        <a class="btn" href="{{ url_for('download_alerts_csv') }}">
+            ↓ Export Alerts CSV
+        </a>
+        <a class="btn" href="{{ url_for('download_alerts') }}">
+            ↓ Export Alerts JSON
+        </a>
+    </div>
+</div>
+
+<div class="metrics four-results">
+    <article>
+        <label>Total Flows Analyzed</label>
+        <strong>{{ "{:,}".format(summary.total_flows) }}</strong>
+        <small>Current dataset</small>
+    </article>
+    <article>
+        <label>Detected Intrusions</label>
+        <strong class="red">{{ "{:,}".format(summary.attacks) }}</strong>
+        <small>{{ summary.threat_percentage }}% threat rate</small>
+    </article>
+    <article>
+        <label>Security Alerts Logged</label>
+        <strong class="cyan">{{ "{:,}".format(alerts | length) }}</strong>
+        <small>Stored alert records</small>
+    </article>
+    <article>
+        <label>Analysis Sessions</label>
+        <strong>{{ "{:,}".format(history | length) }}</strong>
+        <small>Historical executions</small>
+    </article>
+</div>
+
+<!-- Attack Distribution by Category -->
+{% if category_counts %}
+<section class="panel" style="margin-bottom: 1.5rem;">
+    <div class="panel-head">
+        <div>
+            <h2>Attack Categories Detected</h2>
+            <p>Breakdown of malicious network behavior identified across analyzed traffic</p>
+        </div>
+        <span class="pill" style="border-color: #e34f55; color: #ff758d;">THREAT INTELLIGENCE</span>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 0.8rem; margin-top: 10px;">
+        {% for cat_name, cat_count in category_counts.items() %}
+            <div style="background: rgba(17, 29, 46, 0.8); border: 1px solid rgba(238, 150, 53, 0.3); border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 10px;">
+                <span class="badge-category" style="font-size: 12px;">{{ cat_name }}</span>
+                <strong style="color: #edf4ff; font-size: 14px;">{{ "{:,}".format(cat_count) }} flows</strong>
+            </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<!-- Past Analysis Session History -->
+<section class="panel" style="margin-bottom: 1.5rem;">
+    <div class="panel-head">
+        <div>
+            <h2>Analysis Session History</h2>
+            <p>Chronological record of processed dataset uploads and automated detections</p>
+        </div>
+        <span class="pill">AUDIT TRAIL</span>
+    </div>
+
+    {% if history %}
+    <div class="table-wrap">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="text-align: left; border-bottom: 1px solid rgba(143,161,185,0.15);">
+                    <th style="padding: 0.6rem 0.8rem;">Timestamp</th>
+                    <th style="padding: 0.6rem 0.8rem;">Analyzed File</th>
+                    <th style="padding: 0.6rem 0.8rem;">Total Records</th>
+                    <th style="padding: 0.6rem 0.8rem;">Attacks Detected</th>
+                    <th style="padding: 0.6rem 0.8rem;">Normal Traffic</th>
+                    <th style="padding: 0.6rem 0.8rem;">Threat Rate</th>
+                    <th style="padding: 0.6rem 0.8rem;">Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in history %}
+                <tr style="border-bottom: 1px solid rgba(143,161,185,0.08);">
+                    <td style="padding: 0.6rem 0.8rem; font-family: monospace; color: #8ba0b8;">{{ item.timestamp }}</td>
+                    <td style="padding: 0.6rem 0.8rem; font-weight: 600;">{{ item.filename }}</td>
+                    <td style="padding: 0.6rem 0.8rem;">{{ "{:,}".format(item.total_records) }}</td>
+                    <td style="padding: 0.6rem 0.8rem;">
+                        {% if item.attacks_detected > 0 %}
+                            <span class="red" style="font-weight: 700;">🚨 {{ "{:,}".format(item.attacks_detected) }}</span>
+                        {% else %}
+                            <span class="green">✓ 0</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 0.6rem 0.8rem;">{{ "{:,}".format(item.normal_traffic) }}</td>
+                    <td style="padding: 0.6rem 0.8rem;">
+                        <span class="pill" style="font-size: 0.75rem; background: {% if item.threat_percentage > 20 %}rgba(227, 79, 85, 0.2){% else %}rgba(22, 163, 106, 0.2){% endif %}; color: {% if item.threat_percentage > 20 %}#ff758d{% else %}#39dba4{% endif %};">
+                            {{ item.threat_percentage }}%
+                        </span>
+                    </td>
+                    <td style="padding: 0.6rem 0.8rem; color: #35d5e6;">{{ "%.1f%%"|format(item.avg_confidence) if item.avg_confidence else "N/A" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <b>◌</b>
+        <h3>No analysis sessions recorded yet</h3>
+        <p>Uploaded CSV and PCAP files will automatically log session metrics here.</p>
+    </div>
+    {% endif %}
+</section>
+
+<!-- Security Alert Log -->
+<section class="panel">
+    <div class="panel-head">
+        <div>
+            <h2>Persistent Alert Log</h2>
+            <p>High-confidence intrusion events requiring analyst review</p>
+        </div>
+        <a class="btn" href="{{ url_for('download_alerts') }}">Export Alerts JSON</a>
+    </div>
+
+    {% if alerts %}
+    <div class="table-wrap" style="max-height: 480px; overflow-y: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="text-align: left; border-bottom: 1px solid rgba(143,161,185,0.15);">
+                    <th style="padding: 0.6rem 0.8rem;">Time</th>
+                    <th style="padding: 0.6rem 0.8rem;">Severity</th>
+                    <th style="padding: 0.6rem 0.8rem;">Event Details</th>
+                    <th style="padding: 0.6rem 0.8rem;">Source Endpoint</th>
+                    <th style="padding: 0.6rem 0.8rem;">Destination Endpoint</th>
+                    <th style="padding: 0.6rem 0.8rem;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in alerts %}
+                <tr style="border-bottom: 1px solid rgba(143,161,185,0.08);">
+                    <td style="padding: 0.6rem 0.8rem; font-family: monospace; color: #8ba0b8;">{{ alert.time }}</td>
+                    <td style="padding: 0.6rem 0.8rem;">
+                        <span class="pill" style="font-size: 0.75rem; background: rgba(227, 79, 85, 0.2); color: #ff758d; border: 1px solid #e34f55;">
+                            {{ alert.severity }}
+                        </span>
+                    </td>
+                    <td style="padding: 0.6rem 0.8rem;">
+                        <strong>{{ alert.type }}</strong>
+                        <small style="display: block; color: #8ba0b8;">{{ alert.details }}</small>
+                    </td>
+                    <td style="padding: 0.6rem 0.8rem; font-family: monospace;">{{ alert.src_ip }}</td>
+                    <td style="padding: 0.6rem 0.8rem; font-family: monospace;">{{ alert.dst_ip }}</td>
+                    <td style="padding: 0.6rem 0.8rem;">
+                        <span style="color: #39dba4; font-size: 0.82rem;">● {{ alert.status }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <b>✓</b>
+        <h3>No alerts logged</h3>
+        <p>Attack records detected during traffic analysis will automatically populate this log.</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

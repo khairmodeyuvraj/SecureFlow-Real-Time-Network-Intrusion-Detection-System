@@ -1,0 +1,1013 @@
+{% extends "base.html" %}
+{% block title %}Live Monitoring · SecureFlow{% endblock %}
+{% block crumb %}Live Monitoring{% endblock %}
+
+{% block content %}
+<div class="heading">
+    <div>
+        <small>REAL-TIME NETWORK TELEMETRY</small>
+        <h1>Live Intrusion Monitoring</h1>
+        <p>Continuous AI flow classification and automated anomaly detection console.</p>
+    </div>
+    <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+        <button id="startBtn" class="btn primary" onclick="startMonitoring()">
+            ▶ Start Monitoring
+        </button>
+        <button id="pauseBtn" class="btn" onclick="pauseMonitoring()" style="display: none;">
+            ⏸ Pause
+        </button>
+        <button id="stopBtn" class="btn danger" onclick="stopMonitoring()" style="display: none;">
+            ⏹ Stop
+        </button>
+        <button id="clearBtn" class="btn btn-subtle" onclick="clearSession()">
+            ⟲ Clear Session
+        </button>
+    </div>
+</div>
+
+<!-- Capture Mode & Interface Configuration Bar -->
+<div class="panel" style="margin-bottom: 1.5rem; padding: 14px 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+            <div>
+                <label style="font-size: 11px; color: #8da2bb; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 4px;">
+                    Telemetry Mode
+                </label>
+                <select id="telemetryModeSelect" class="custom-select" onchange="onModeChange()">
+                    <option value="demo" selected>Demonstration Stream (Benchmark Flows)</option>
+                    <option value="live">Live Hardware Packet Capture (Scapy)</option>
+                    <option value="pcap">PCAP File Analysis (Batch Traffic Ingestion)</option>
+                    <option value="csv">CSV Traffic Analysis (Flow Records)</option>
+                </select>
+            </div>
+
+            <div id="interfaceGroup" style="display: none; min-width: 320px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label style="font-size: 11px; color: #8da2bb; text-transform: uppercase; font-weight: 700; margin: 0;">
+                        Network Interface
+                    </label>
+                    <button type="button" id="refreshIfacesBtn" class="btn btn-subtle" onclick="refreshInterfaces()" style="padding: 2px 8px; font-size: 11px; height: 22px; line-height: 1;">
+                        ↻ Refresh
+                    </button>
+                </div>
+                <select id="networkInterfaceSelect" class="custom-select" style="width: 100%;" onchange="onInterfaceChange()">
+                    {% if interfaces %}
+                        {% for iface in interfaces %}
+                            <option value="{{ iface.name }}" data-ip="{{ iface.ip }}" data-status="{{ iface.status }}" data-desc="{{ iface.description }}" data-scapy="{{ iface.scapy_name }}" {% if iface.has_ip %}selected{% endif %}>
+                                {{ iface.name }} {% if iface.ip %}({{ iface.ip }}){% endif %} · {{ iface.status }}
+                            </option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="">No usable network adapters detected</option>
+                    {% endif %}
+                </select>
+                <div id="selectedIfaceDetails" style="margin-top: 4px; font-size: 11px; color: #8da2bb;">
+                    <!-- Auto-populated via JS -->
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span id="streamStatusBadge" class="pill" style="background: rgba(22, 163, 106, 0.15); color: #39dba4; border: 1px solid #16a36a;">
+                ● Engine Ready
+            </span>
+            <span id="telemetryTypeBadge" class="pill" style="background: rgba(67, 217, 231, 0.15); color: var(--cyan); border: 1px solid rgba(67, 217, 231, 0.3);">
+                Demonstration Mode
+            </span>
+        </div>
+    </div>
+
+    <!-- Error or permission message notification -->
+    <div id="captureNotice" style="margin-top: 10px; font-size: 11.5px; color: #a9b8ca; display: flex; align-items: center; gap: 6px;">
+        <span style="color: var(--cyan);">ℹ</span>
+        <span id="captureNoticeText">
+            {% if capabilities.can_sniff %}
+                Physical network adapters detected. In Demonstration Mode, verified benchmark flows are streamed through the ML classifier.
+            {% else %}
+                Hardware capture notice: Live packet capture on Windows requires Npcap with Administrator privileges. Demonstrating with verified high-fidelity benchmark traffic.
+            {% endif %}
+        </span>
+    </div>
+</div>
+
+<!-- Metrics Cards -->
+<div class="metrics four-results">
+    <article>
+        <label>Live Streamed Flows</label>
+        <strong id="statStreamed">0</strong>
+        <small>Processed in current session</small>
+    </article>
+    <article>
+        <label>Detected Threats</label>
+        <strong id="statAttacks" class="red">0</strong>
+        <small id="statThreatRate">0.0% threat ratio</small>
+    </article>
+    <article>
+        <label>Normal Traffic</label>
+        <strong id="statBenign" class="green">0</strong>
+        <small>Verified legitimate flows</small>
+    </article>
+    <article>
+        <label>AI Inference Engine</label>
+        <strong class="cyan">Online</strong>
+        <small>Random Forest (74 Features)</small>
+    </article>
+</div>
+
+<!-- Real-Time Flow Activity & Threat Ingestion Chart -->
+<section class="panel" style="margin-top: 1.5rem;">
+    <div class="panel-head">
+        <div>
+            <h2>Real-Time Flow Activity &amp; Threat Ingestion</h2>
+            <p>Dynamic timeline of ingested flows and detected intrusions</p>
+        </div>
+        <span class="pill" style="font-size: 0.75rem;">LIVE STREAM (1.2s)</span>
+    </div>
+    <div class="chart" style="height: 220px;">
+        <canvas id="liveActivityChart"></canvas>
+    </div>
+</section>
+
+<!-- Detailed Classified Flow Records Section (Matching Reference Design) -->
+<section class="classified-records-panel">
+    <div class="table-top-bar">
+        <div class="table-top-title">
+            <span class="icon-badge">▦</span>
+            <div>
+                <h2>Detailed Analysis Results</h2>
+                <small style="color: #8da2bb; font-size: 11px;">Classified network traffic flows with confidence and deep telemetry</small>
+            </div>
+        </div>
+
+        <div class="table-top-controls">
+            <!-- Filter Dropdown -->
+            <select id="filterSelect" class="custom-select" onchange="onFilterChange()">
+                <option value="all">All Results</option>
+                <option value="ATTACK">Attacks Only</option>
+                <option value="BENIGN">Normal Only</option>
+            </select>
+
+            <!-- Page Size Dropdown -->
+            <select id="pageSizeSelect" class="custom-select" onchange="onPageSizeChange()">
+                <option value="10">10 per page</option>
+                <option value="25" selected>25 per page</option>
+                <option value="50">50 per page</option>
+                <option value="100">100 per page</option>
+            </select>
+
+            <!-- Search input -->
+            <input type="text" id="searchInput" class="custom-search" placeholder="Search IP, port, protocol, attack..." oninput="onSearchInput()">
+        </div>
+    </div>
+
+    <!-- Table Container -->
+    <div class="classified-table-wrap">
+        <table class="classified-table" id="classifiedTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable('id')"># ▾</th>
+                    <th onclick="sortTable('Source_IP')">IP Address</th>
+                    <th onclick="sortTable('Destination_IP')">Destination IP</th>
+                    <th onclick="sortTable('Prediction')">Prediction</th>
+                    <th onclick="sortTable('Attack_Type')">Attack Type</th>
+                    <th onclick="sortTable('Confidence')">Confidence</th>
+                    <th onclick="sortTable('Duration')">Duration</th>
+                    <th onclick="sortTable('Source_Bytes')">Source Bytes</th>
+                    <th onclick="sortTable('Download_Bytes')">Download Bytes</th>
+                    <th onclick="sortTable('Timestamp')">Timestamp</th>
+                    <th>Protocol</th>
+                    <th style="text-align: center;">Behavior</th>
+                </tr>
+            </thead>
+            <tbody id="classifiedTableBody">
+                <tr id="emptyTableState">
+                    <td colspan="12" style="text-align: center; padding: 40px 20px; color: #8fa2b9;">
+                        <div style="font-size: 28px; margin-bottom: 8px;">⌁</div>
+                        <strong>Monitoring session is idle</strong>
+                        <p style="margin: 4px 0 0; font-size: 11.5px;">Click <strong>▶ Start Monitoring</strong> above to begin continuous flow classification.</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination bar -->
+    <div class="table-bottom-bar">
+        <div id="tableInfoText">Showing 0 to 0 of 0 entries</div>
+        <div class="pagination-controls" id="paginationControls"></div>
+    </div>
+</section>
+
+<!-- View Details Modal (Deep Telemetry Inspection) -->
+<div class="flow-modal-backdrop" id="flowModal" onclick="handleBackdropClick(event)">
+    <div class="flow-modal-dialog">
+        <div class="modal-head">
+            <h3>
+                <span>🛡️</span>
+                <span>Flow Telemetry &amp; Inspection <span id="modalFlowId" style="color: var(--cyan); font-family: monospace;">#0</span></span>
+            </h3>
+            <button class="modal-close-btn" onclick="closeFlowModal()">✕</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- Hero summary cards -->
+            <div class="modal-grid-hero">
+                <div class="modal-hero-card">
+                    <label>Classification</label>
+                    <div id="modalPredictionBadge"></div>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Attack Category</label>
+                    <strong id="modalAttackType">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Model Confidence</label>
+                    <strong id="modalConfidence" style="color: var(--cyan);">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Flow Duration</label>
+                    <strong id="modalDuration">-</strong>
+                </div>
+            </div>
+
+            <!-- Endpoints section -->
+            <div class="modal-section-title">Network Endpoints &amp; Protocol</div>
+            <div class="modal-grid-hero">
+                <div class="modal-hero-card">
+                    <label>Source Endpoint</label>
+                    <strong id="modalSourceEndpoint" class="cell-mono">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Destination Endpoint</label>
+                    <strong id="modalDestEndpoint" class="cell-mono">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Protocol / Transport</label>
+                    <strong id="modalProtocol">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Detection Timestamp</label>
+                    <strong id="modalTimestamp" class="cell-mono">-</strong>
+                </div>
+            </div>
+
+            <!-- Flow Telemetry Metrics -->
+            <div class="modal-section-title">Flow Metrics &amp; Volume</div>
+            <div class="modal-grid-hero">
+                <div class="modal-hero-card">
+                    <label>Source / Forward Bytes</label>
+                    <strong id="modalSourceBytes">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Download / Backward Bytes</label>
+                    <strong id="modalDownloadBytes">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Forward Packets</label>
+                    <strong id="modalFwdPackets">-</strong>
+                </div>
+                <div class="modal-hero-card">
+                    <label>Backward Packets</label>
+                    <strong id="modalBwdPackets">-</strong>
+                </div>
+            </div>
+
+            <!-- Machine Learning Extracted Features -->
+            <div class="modal-section-title">Extracted ML Flow Features (74 Features)</div>
+            <table class="modal-features-table">
+                <tbody id="modalFeaturesBody">
+                    <tr><td colspan="2" style="text-align: center; color: #8da2bb;">No extra features extracted.</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="modal-foot">
+            <span id="modalBlockIpContainer" style="margin-right: auto;"></span>
+            <button class="btn btn-subtle" onclick="closeFlowModal()">OK</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // State Management
+    let allRecords = [];
+    let filteredRecords = [];
+    let currentPage = 1;
+    let pageSize = 25;
+    let sortColumn = 'id';
+    let sortAsc = false;
+    let isMonitoring = {{ 'true' if streamer_running and not streamer_paused else 'false' }};
+    let isPaused = {{ 'true' if streamer_paused else 'false' }};
+    let pollInterval = null;
+    let currentMode = "{{ streamer_mode }}";
+
+    // Chart.js Timeline
+    let streamChart = null;
+    const chartLabels = [];
+    const chartFlows = [];
+    const chartThreats = [];
+
+    document.addEventListener("DOMContentLoaded", function () {
+        initChart();
+        updateUIButtons();
+        onInterfaceChange();
+
+        if (isMonitoring && !isPaused) {
+            startPolling();
+        } else {
+            // Fetch initial buffer if already has data
+            fetchStreamData();
+        }
+    });
+
+    function initChart() {
+        const ctx = document.getElementById("liveActivityChart");
+        if (ctx && typeof Chart !== "undefined") {
+            streamChart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: chartLabels,
+                    datasets: [
+                        {
+                            label: "Ingested Flows",
+                            data: chartFlows,
+                            borderColor: "#43d9e7",
+                            backgroundColor: "rgba(67, 217, 231, 0.1)",
+                            fill: true,
+                            tension: 0.35,
+                            borderWidth: 2,
+                            pointRadius: 2,
+                        },
+                        {
+                            label: "Detected Intrusions",
+                            data: chartThreats,
+                            borderColor: "#ff7188",
+                            backgroundColor: "rgba(255, 113, 136, 0.15)",
+                            fill: true,
+                            tension: 0.35,
+                            borderWidth: 2,
+                            pointRadius: 2,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 300 },
+                    plugins: {
+                        legend: {
+                            labels: { color: "#8295ad" }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: "#8295ad", maxTicksLimit: 12 },
+                            grid: { color: "rgba(143, 161, 185, 0.08)" }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: "#8295ad" },
+                            grid: { color: "rgba(143, 161, 185, 0.08)" }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    function onModeChange() {
+        const mode = document.getElementById("telemetryModeSelect").value;
+        const ifGroup = document.getElementById("interfaceGroup");
+        const typeBadge = document.getElementById("telemetryTypeBadge");
+        const noticeText = document.getElementById("captureNoticeText");
+
+        if (mode === "live") {
+            ifGroup.style.display = "block";
+            typeBadge.textContent = "Live Hardware Capture";
+            typeBadge.style.color = "#ff758d";
+            typeBadge.style.borderColor = "#ff758d";
+            onInterfaceChange();
+            if (noticeText) {
+                noticeText.textContent = "Live packet capture will sniff network traffic on the selected interface using Scapy/Npcap when you click Start Monitoring.";
+            }
+        } else if (mode === "pcap") {
+            ifGroup.style.display = "none";
+            typeBadge.textContent = "PCAP File Analysis";
+            typeBadge.style.color = "#35dce6";
+            typeBadge.style.borderColor = "rgba(67, 217, 231, 0.3)";
+            if (noticeText) {
+                noticeText.innerHTML = 'PCAP file analysis is ready via the Traffic Upload module. <a href="{{ url_for("traffic_upload") }}" style="color: #35dce6; font-weight: 600; text-decoration: underline; margin-left: 6px;">Upload &amp; Analyze PCAP File &rarr;</a>';
+            }
+        } else if (mode === "csv") {
+            ifGroup.style.display = "none";
+            typeBadge.textContent = "CSV Flow Analysis";
+            typeBadge.style.color = "#35dce6";
+            typeBadge.style.borderColor = "rgba(67, 217, 231, 0.3)";
+            if (noticeText) {
+                noticeText.innerHTML = 'CSV batch traffic analysis is ready via the Traffic Upload module. <a href="{{ url_for("traffic_upload") }}" style="color: #35dce6; font-weight: 600; text-decoration: underline; margin-left: 6px;">Upload &amp; Classify CSV Flows &rarr;</a>';
+            }
+        } else {
+            ifGroup.style.display = "none";
+            typeBadge.textContent = "Demonstration Mode";
+            typeBadge.style.color = "var(--cyan)";
+            typeBadge.style.borderColor = "rgba(67, 217, 231, 0.3)";
+            if (noticeText) {
+                noticeText.textContent = "Physical network adapters detected. In Demonstration Mode, verified benchmark flows are streamed through the ML classifier.";
+            }
+        }
+    }
+
+    function onInterfaceChange() {
+        const select = document.getElementById("networkInterfaceSelect");
+        const details = document.getElementById("selectedIfaceDetails");
+        if (!select || !details) return;
+        const opt = select.options[select.selectedIndex];
+        if (opt && opt.value) {
+            const ip = opt.dataset.ip || "No IP assigned";
+            const status = opt.dataset.status || "Ready";
+            details.innerHTML = `<span style="color: #35dce6; font-weight: 600;">Adapter:</span> ${opt.value} &nbsp;|&nbsp; <span style="color: #35dce6; font-weight: 600;">IP:</span> ${ip} &nbsp;|&nbsp; <span style="color: #35dce6; font-weight: 600;">Status:</span> ${status}`;
+        } else {
+            details.innerHTML = `<span style="color: #e34f55;">No usable network adapter selected.</span>`;
+        }
+    }
+
+    function refreshInterfaces() {
+        const btn = document.getElementById("refreshIfacesBtn");
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = "↻ Scanning...";
+        }
+        fetch("{{ url_for('api_live_interfaces') }}?refresh=true")
+            .then(res => res.json())
+            .then(data => {
+                const select = document.getElementById("networkInterfaceSelect");
+                if (select) {
+                    select.innerHTML = "";
+                    const ifaces = data.interfaces || [];
+                    if (ifaces.length === 0) {
+                        const opt = document.createElement("option");
+                        opt.value = "";
+                        opt.textContent = "No usable adapters detected";
+                        select.appendChild(opt);
+                    } else {
+                        ifaces.forEach((item, idx) => {
+                            const opt = document.createElement("option");
+                            opt.value = item.name;
+                            opt.textContent = `${item.name} ${item.ip ? '(' + item.ip + ')' : ''} · ${item.status || 'Ready'}`;
+                            opt.dataset.ip = item.ip || "";
+                            opt.dataset.status = item.status || "";
+                            opt.dataset.desc = item.description || "";
+                            opt.dataset.scapy = item.scapy_name || "";
+                            if (item.has_ip && idx === 0) opt.selected = true;
+                            select.appendChild(opt);
+                        });
+                    }
+                    onInterfaceChange();
+                }
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = "↻ Refresh";
+                }
+            })
+            .catch(err => {
+                console.error("Failed to refresh interfaces:", err);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = "↻ Refresh";
+                }
+            });
+    }
+
+    function updateUIButtons() {
+        const startBtn = document.getElementById("startBtn");
+        const pauseBtn = document.getElementById("pauseBtn");
+        const stopBtn = document.getElementById("stopBtn");
+        const badge = document.getElementById("streamStatusBadge");
+
+        if (isMonitoring && !isPaused) {
+            startBtn.style.display = "none";
+            pauseBtn.style.display = "inline-flex";
+            pauseBtn.className = "btn danger";
+            pauseBtn.textContent = "⏸ Pause Stream";
+            stopBtn.style.display = "inline-flex";
+
+            badge.textContent = "● Streaming Active";
+            badge.style.background = "rgba(67, 217, 231, 0.15)";
+            badge.style.color = "#43d9e7";
+            badge.style.borderColor = "#43d9e7";
+        } else if (isPaused) {
+            startBtn.style.display = "none";
+            pauseBtn.style.display = "inline-flex";
+            pauseBtn.className = "btn";
+            pauseBtn.textContent = "▶ Resume Stream";
+            stopBtn.style.display = "inline-flex";
+
+            badge.textContent = "● Streaming Paused";
+            badge.style.background = "rgba(244, 199, 108, 0.15)";
+            badge.style.color = "#f4c76c";
+            badge.style.borderColor = "#f4c76c";
+        } else {
+            startBtn.style.display = "inline-flex";
+            pauseBtn.style.display = "none";
+            stopBtn.style.display = "none";
+
+            badge.textContent = "● Engine Ready";
+            badge.style.background = "rgba(143, 161, 185, 0.15)";
+            badge.style.color = "#8da2bb";
+            badge.style.borderColor = "#8da2bb";
+        }
+    }
+
+    function startMonitoring() {
+        const mode = document.getElementById("telemetryModeSelect").value;
+        const ifaceSelect = document.getElementById("networkInterfaceSelect");
+        const iface = ifaceSelect ? ifaceSelect.value : null;
+
+        if (mode === "live" && (!iface || iface.trim() === "")) {
+            const noticeText = document.getElementById("captureNoticeText");
+            if (noticeText) {
+                noticeText.textContent = "Please select a valid network adapter before starting live packet capture.";
+                noticeText.style.color = "#ff7188";
+            }
+            return;
+        }
+
+        const startBtn = document.getElementById("startBtn");
+        if (startBtn) {
+            startBtn.disabled = true;
+            startBtn.textContent = "⌛ Initializing...";
+        }
+
+        fetch("{{ url_for('api_live_toggle') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "start", mode: mode, interface: iface })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (startBtn) {
+                startBtn.disabled = false;
+                startBtn.textContent = "▶ Start Monitoring";
+            }
+
+            if (data.status === "error" || data.error) {
+                isMonitoring = false;
+                isPaused = false;
+                stopPolling();
+                updateUIButtons();
+                const noticeText = document.getElementById("captureNoticeText");
+                if (noticeText) {
+                    noticeText.textContent = data.error;
+                    noticeText.style.color = "#ff7188";
+                }
+                const badge = document.getElementById("streamStatusBadge");
+                if (badge) {
+                    badge.textContent = "● Error";
+                    badge.style.background = "rgba(255, 113, 136, 0.15)";
+                    badge.style.color = "#ff7188";
+                    badge.style.borderColor = "#ff7188";
+                }
+                return;
+            }
+
+            isMonitoring = true;
+            isPaused = false;
+            currentMode = data.mode;
+            const noticeText = document.getElementById("captureNoticeText");
+            if (noticeText) {
+                noticeText.style.color = "#a9b8ca";
+            }
+            updateUIButtons();
+            startPolling();
+        })
+        .catch(err => {
+            console.error("Start error:", err);
+            if (startBtn) {
+                startBtn.disabled = false;
+                startBtn.textContent = "▶ Start Monitoring";
+            }
+        });
+    }
+
+    function pauseMonitoring() {
+        if (!isPaused) {
+            fetch("{{ url_for('api_live_toggle') }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "pause" })
+            })
+            .then(r => r.json())
+            .then(() => {
+                isPaused = true;
+                updateUIButtons();
+            });
+        } else {
+            fetch("{{ url_for('api_live_toggle') }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "resume" })
+            })
+            .then(r => r.json())
+            .then(() => {
+                isPaused = false;
+                updateUIButtons();
+            });
+        }
+    }
+
+    function stopMonitoring() {
+        const stopBtn = document.getElementById("stopBtn");
+        if (stopBtn) {
+            stopBtn.disabled = true;
+            stopBtn.textContent = "⏹ Stopping...";
+        }
+        fetch("{{ url_for('api_live_toggle') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "stop" })
+        })
+        .then(r => r.json())
+        .then(() => {
+            if (stopBtn) {
+                stopBtn.disabled = false;
+                stopBtn.textContent = "⏹ Stop";
+            }
+            isMonitoring = false;
+            isPaused = false;
+            stopPolling();
+            updateUIButtons();
+            const badge = document.getElementById("streamStatusBadge");
+            if (badge) {
+                badge.textContent = "● Stopped";
+                badge.style.background = "rgba(143, 161, 185, 0.15)";
+                badge.style.color = "#8da2bb";
+                badge.style.borderColor = "#8da2bb";
+            }
+        })
+        .catch(err => {
+            console.error("Stop error:", err);
+            if (stopBtn) {
+                stopBtn.disabled = false;
+                stopBtn.textContent = "⏹ Stop";
+            }
+        });
+    }
+
+    function clearSession() {
+        fetch("{{ url_for('api_live_clear') }}", { method: "POST" })
+        .then(r => r.json())
+        .then(() => {
+            allRecords = [];
+            filteredRecords = [];
+            currentPage = 1;
+            renderTable();
+
+            document.getElementById("statStreamed").textContent = "0";
+            document.getElementById("statAttacks").textContent = "0";
+            document.getElementById("statBenign").textContent = "0";
+            document.getElementById("statThreatRate").textContent = "0.0% threat ratio";
+
+            chartLabels.length = 0;
+            chartFlows.length = 0;
+            chartThreats.length = 0;
+            if (streamChart) streamChart.update();
+        });
+    }
+
+    function startPolling() {
+        if (!pollInterval) {
+            fetchStreamData();
+            pollInterval = setInterval(fetchStreamData, 1200);
+        }
+    }
+
+    function stopPolling() {
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+    }
+
+    function fetchStreamData() {
+        fetch("{{ url_for('api_live_stream') }}")
+        .then(r => r.json())
+        .then(data => {
+            // Update stats
+            document.getElementById("statStreamed").textContent = data.total_streamed.toLocaleString();
+            document.getElementById("statAttacks").textContent = data.total_attacks.toLocaleString();
+            document.getElementById("statBenign").textContent = data.total_benign.toLocaleString();
+            document.getElementById("statThreatRate").textContent = `${data.threat_percentage}% threat ratio`;
+
+            if (data.error) {
+                document.getElementById("captureNoticeText").textContent = data.error;
+            }
+
+            const newRecords = data.records || [];
+            if (newRecords.length > 0) {
+                // Merge without duplicates based on flow_id
+                const seenIds = new Set(allRecords.map(r => r.id));
+                newRecords.forEach(rec => {
+                    if (!seenIds.has(rec.id)) {
+                        allRecords.push(rec);
+                        seenIds.add(rec.id);
+                    }
+                });
+
+                // Update filter options if new attack categories appeared
+                updateFilterOptions();
+
+                // Re-apply filter and render
+                applyFiltersAndPagination();
+
+                // Update timeline chart
+                if (streamChart) {
+                    const timeLabel = new Date().toLocaleTimeString();
+                    chartLabels.push(timeLabel);
+                    chartFlows.push(newRecords.length);
+                    chartThreats.push(newRecords.filter(r => r.Prediction === "ATTACK").length);
+
+                    if (chartLabels.length > 18) {
+                        chartLabels.shift();
+                        chartFlows.shift();
+                        chartThreats.shift();
+                    }
+                    streamChart.update();
+                }
+            }
+        })
+        .catch(err => console.error("Poll stream error:", err));
+    }
+
+    function updateFilterOptions() {
+        const select = document.getElementById("filterSelect");
+        const existingValues = new Set(Array.from(select.options).map(o => o.value));
+
+        const attackTypes = new Set(
+            allRecords
+                .filter(r => r.Prediction === "ATTACK" && r.Attack_Type)
+                .map(r => r.Attack_Type)
+        );
+
+        attackTypes.forEach(t => {
+            if (!existingValues.has(t)) {
+                const opt = document.createElement("option");
+                opt.value = t;
+                opt.textContent = `Attack: ${t}`;
+                select.appendChild(opt);
+            }
+        });
+    }
+
+    function onFilterChange() {
+        currentPage = 1;
+        applyFiltersAndPagination();
+    }
+
+    function onPageSizeChange() {
+        pageSize = parseInt(document.getElementById("pageSizeSelect").value, 10);
+        currentPage = 1;
+        applyFiltersAndPagination();
+    }
+
+    function onSearchInput() {
+        currentPage = 1;
+        applyFiltersAndPagination();
+    }
+
+    function applyFiltersAndPagination() {
+        const filterVal = document.getElementById("filterSelect").value;
+        const query = document.getElementById("searchInput").value.trim().toLowerCase();
+
+        filteredRecords = allRecords.filter(row => {
+            // Category / Prediction filter
+            if (filterVal === "ATTACK" && row.Prediction !== "ATTACK") return false;
+            if (filterVal === "BENIGN" && row.Prediction !== "BENIGN") return false;
+            if (filterVal !== "all" && filterVal !== "ATTACK" && filterVal !== "BENIGN") {
+                if (row.Attack_Type !== filterVal) return false;
+            }
+
+            // Search query
+            if (query) {
+                const searchable = `${row.Source_IP} ${row.Destination_IP} ${row.Source_Port} ${row.Destination_Port} ${row.Protocol} ${row.Prediction} ${row.Attack_Type} ${row.Timestamp}`.toLowerCase();
+                if (!searchable.includes(query)) return false;
+            }
+            return true;
+        });
+
+        // Sort records
+        filteredRecords.sort((a, b) => {
+            let valA = a[sortColumn];
+            let valB = b[sortColumn];
+
+            if (typeof valA === "string") valA = valA.toLowerCase();
+            if (typeof valB === "string") valB = valB.toLowerCase();
+
+            if (valA < valB) return sortAsc ? -1 : 1;
+            if (valA > valB) return sortAsc ? 1 : -1;
+            return 0;
+        });
+
+        renderTable();
+    }
+
+    function sortTable(column) {
+        if (sortColumn === column) {
+            sortAsc = !sortAsc;
+        } else {
+            sortColumn = column;
+            sortAsc = true;
+        }
+        applyFiltersAndPagination();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById("classifiedTableBody");
+        const total = filteredRecords.length;
+
+        if (total === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="12" style="text-align: center; padding: 32px; color: #8da2bb;">
+                        No matching classified flow records found.
+                    </td>
+                </tr>
+            `;
+            document.getElementById("tableInfoText").textContent = "Showing 0 to 0 of 0 entries";
+            document.getElementById("paginationControls").innerHTML = "";
+            return;
+        }
+
+        const totalPages = Math.ceil(total / pageSize);
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+
+        const startIdx = (currentPage - 1) * pageSize;
+        const endIdx = Math.min(startIdx + pageSize, total);
+        const pageItems = filteredRecords.slice(startIdx, endIdx);
+
+        tbody.innerHTML = "";
+        pageItems.forEach((row, index) => {
+            const isAttack = row.Prediction === "ATTACK";
+            const predBadge = isAttack
+                ? `<span class="badge-pill badge-attack">🚨 ATTACK</span>`
+                : `<span class="badge-pill badge-normal">✓ NORMAL</span>`;
+
+            const catBadgeClass = isAttack ? "badge-category" : "badge-category normal-cat";
+            const catBadge = `<span class="${catBadgeClass}">${escapeHtml(row.Attack_Type || "Normal")}</span>`;
+
+            const conf = typeof row.Confidence === "number" ? row.Confidence : parseFloat(row.Confidence) || 99.0;
+            const confClass = conf >= 85 ? "conf-high" : (conf >= 60 ? "conf-mid" : "conf-low");
+
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td class="cell-mono" style="color: #8da2bb;">${row.id || (startIdx + index + 1)}</td>
+                <td class="cell-mono"><strong>${escapeHtml(row.Source_IP || "-")}</strong></td>
+                <td class="cell-mono">${escapeHtml(row.Destination_IP || "-")}</td>
+                <td>${predBadge}</td>
+                <td>${catBadge}</td>
+                <td>
+                    <div class="conf-cell">
+                        <span class="conf-text">${conf.toFixed(1)}%</span>
+                        <div class="conf-bar">
+                            <div class="conf-fill ${confClass}" style="width: ${Math.min(100, Math.max(10, conf))}%"></div>
+                        </div>
+                    </div>
+                </td>
+                <td class="cell-mono">${typeof row.Duration === "number" ? row.Duration.toFixed(3) : row.Duration}s</td>
+                <td class="cell-mono">${(row.Source_Bytes || 0).toLocaleString()}</td>
+                <td class="cell-mono">${(row.Download_Bytes || 0).toLocaleString()}</td>
+                <td class="cell-mono" style="color: #9ab0cb;">${escapeHtml(row.Timestamp || "-")}</td>
+                <td><span class="pill" style="font-size: 11px;">${escapeHtml(row.Protocol || "TCP")}</span></td>
+                <td style="text-align: center;">
+                    <button class="btn-behavior" onclick="openFlowModal(${row.id})">
+                        <span>👁</span> Details
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Update info & pagination controls
+        document.getElementById("tableInfoText").textContent =
+            `Showing ${startIdx + 1} to ${endIdx} of ${total} entries (Total: ${allRecords.length})`;
+
+        renderPagination(totalPages);
+    }
+
+    function renderPagination(totalPages) {
+        const container = document.getElementById("paginationControls");
+        container.innerHTML = "";
+
+        if (totalPages <= 1) return;
+
+        const prevBtn = document.createElement("button");
+        prevBtn.className = "page-btn";
+        prevBtn.textContent = "« Prev";
+        prevBtn.disabled = currentPage === 1;
+        prevBtn.onclick = () => { if (currentPage > 1) { currentPage--; renderTable(); } };
+        container.appendChild(prevBtn);
+
+        // Page buttons (window around current)
+        let startPage = Math.max(1, currentPage - 2);
+        let endPage = Math.min(totalPages, currentPage + 2);
+
+        for (let p = startPage; p <= endPage; p++) {
+            const pBtn = document.createElement("button");
+            pBtn.className = `page-btn ${p === currentPage ? 'active' : ''}`;
+            pBtn.textContent = p;
+            pBtn.onclick = () => { currentPage = p; renderTable(); };
+            container.appendChild(pBtn);
+        }
+
+        const nextBtn = document.createElement("button");
+        nextBtn.className = "page-btn";
+        nextBtn.textContent = "Next »";
+        nextBtn.disabled = currentPage === totalPages;
+        nextBtn.onclick = () => { if (currentPage < totalPages) { currentPage++; renderTable(); } };
+        container.appendChild(nextBtn);
+    }
+
+    // Modal Inspection Logic
+    function openFlowModal(flowId) {
+        const row = allRecords.find(r => r.id === flowId);
+        if (!row) return;
+
+        document.getElementById("modalFlowId").textContent = `#${row.id}`;
+        document.getElementById("modalAttackType").textContent = row.Attack_Type || "Normal";
+        document.getElementById("modalConfidence").textContent = `${row.Confidence}%`;
+        document.getElementById("modalDuration").textContent = `${row.Duration}s`;
+        document.getElementById("modalSourceEndpoint").textContent = `${row.Source_IP}:${row.Source_Port || '-'}`;
+        document.getElementById("modalDestEndpoint").textContent = `${row.Destination_IP}:${row.Destination_Port || '-'}`;
+        document.getElementById("modalProtocol").textContent = row.Protocol || "TCP";
+        document.getElementById("modalTimestamp").textContent = row.Timestamp || "-";
+        document.getElementById("modalSourceBytes").textContent = `${(row.Source_Bytes || 0).toLocaleString()} bytes`;
+        document.getElementById("modalDownloadBytes").textContent = `${(row.Download_Bytes || 0).toLocaleString()} bytes`;
+        document.getElementById("modalFwdPackets").textContent = `${(row.Fwd_Packets || 1).toLocaleString()} pkts`;
+        document.getElementById("modalBwdPackets").textContent = `${(row.Bwd_Packets || 1).toLocaleString()} pkts`;
+
+        const isAttack = row.Prediction === "ATTACK";
+        document.getElementById("modalPredictionBadge").innerHTML = isAttack
+            ? `<span class="badge-pill badge-attack">🚨 ATTACK DETECTED</span>`
+            : `<span class="badge-pill badge-normal">✓ BENIGN TRAFFIC</span>`;
+
+        // Render extracted ML features
+        const featuresBody = document.getElementById("modalFeaturesBody");
+        featuresBody.innerHTML = "";
+        const feats = row.features || {};
+
+        if (Object.keys(feats).length > 0) {
+            for (const [key, val] of Object.entries(feats)) {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${escapeHtml(key)}</td><td>${escapeHtml(String(val))}</td>`;
+                featuresBody.appendChild(tr);
+            }
+        } else {
+            featuresBody.innerHTML = `
+                <tr><td>Destination Port</td><td>${row.Destination_Port || 80}</td></tr>
+                <tr><td>Flow Duration</td><td>${row.Duration}s</td></tr>
+                <tr><td>Source Bytes</td><td>${row.Source_Bytes}</td></tr>
+                <tr><td>Download Bytes</td><td>${row.Download_Bytes}</td></tr>
+                <tr><td>Classification Confidence</td><td>${row.Confidence}%</td></tr>
+            `;
+        }
+
+        // Quick block IP button if attack
+        const blockContainer = document.getElementById("modalBlockIpContainer");
+        if (isAttack && row.Source_IP && row.Source_IP !== "-") {
+            blockContainer.innerHTML = `
+                <form method="post" action="{{ url_for('blocked_ips') }}" style="display:inline;">
+                    <input type="hidden" name="ip" value="${escapeHtml(row.Source_IP)}">
+                    <input type="hidden" name="reason" value="Live IDS detected ${escapeHtml(row.Attack_Type)}">
+                    <button type="submit" class="btn danger" style="padding: 6px 14px; font-size: 12px;">
+                        ⊘ Block IP (${escapeHtml(row.Source_IP)})
+                    </button>
+                </form>
+            `;
+        } else {
+            blockContainer.innerHTML = "";
+        }
+
+        document.getElementById("flowModal").classList.add("open");
+    }
+
+    function closeFlowModal() {
+        document.getElementById("flowModal").classList.remove("open");
+    }
+
+    function handleBackdropClick(e) {
+        if (e.target.id === "flowModal") closeFlowModal();
+    }
+
+    function escapeHtml(str) {
+        if (!str) return "";
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+</script>
+{% endblock %}
